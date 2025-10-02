@@ -16,7 +16,7 @@ const reset = () => {
 
 <template>
   <h1>Hello World</h1>
-  <p>{{  counter  }}</p>
+  <p style="font-size: 50px;">{{  counter  }}</p>
   <button @click="increment">increment</button>
   <button @click="reset">reset</button>
 </template>
