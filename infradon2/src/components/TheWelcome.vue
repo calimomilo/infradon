@@ -1,6 +1,24 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+import PouchDB from 'pouchdb';
 
+const storage = ref();
+
+onMounted(() => {
+  console.log('=> Composant initialisé');
+  initDatabase();
+});
+
+const initDatabase = () => {
+  console.log('=> Connexion à la base de données');
+  const db = new PouchDB('http://calimo:c@lim=m0m!lo@localhost:5984/infradon2')
+  if (db) {
+    console.log("Connected to collection : " + db?.name)
+    storage.value = db
+  } else {
+    console.warn('Something went wrong')
+  }
+}
 
 const counter = ref(0);
 
