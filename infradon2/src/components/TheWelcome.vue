@@ -89,16 +89,24 @@ const updateDoc = (post: Post): any => {
 
 let counter = 0
 const words = [
-  'bonjour',
-  'spaghetti',
-  'casque',
-  'pull',
-  'vert',
-  'verre',
-  'vers',
-  'vair',
   'léa',
   'inoé',
+  'camilo',
+  'teicir',
+  'yannis',
+  'elia',
+  'loann',
+  'sasita',
+  'sarah',
+  'enya',
+  'gabriel',
+  'nuno',
+  'tanguy',
+  'loic',
+  'dylan',
+  'liliana',
+  'thierry',
+  'valentin',
 ]
 </script>
 
