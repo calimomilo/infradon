@@ -18,15 +18,17 @@ const postsData = ref<Post[]>([])
 onMounted(() => {
   console.log('=> Composant initialisé')
   initDatabase()
-  fetchData()
 })
 
 const initDatabase = () => {
   console.log('=> Connexion à la base de données')
-  const db = new PouchDB('http://calimo:admin@localhost:5984/infradon2')
-  if (db) {
-    console.log('Connected to collection : ' + db?.name)
-    storage.value = db
+  const localdb = new PouchDB('collection_infradon2')
+  if (localdb) {
+    console.log('Connected to collection : ' + localdb?.name)
+    storage.value = localdb
+    localdb.replicate.from('http://calimo:admin@localhost:5984/infradon2').then((_result) => {
+      fetchData()
+    })
   } else {
     console.warn('Something went wrong')
   }
@@ -87,6 +89,10 @@ const updateDoc = (post: Post): any => {
     })
 }
 
+const syncData = (): any => {
+  storage.value.replicate.to('http://calimo:admin@localhost:5984/infradon2')
+}
+
 let counter = 0
 const words = [
   'léa',
@@ -112,6 +118,7 @@ const words = [
 
 <template>
   <h1>Fetch Data</h1>
+  <button @click="syncData">Synchroniser la DB</button>
   <button @click="createDoc">Ajouter un document</button>
   <article v-for="post in postsData" v-bind:key="(post as any).id">
     <h2>{{ post.title }}</h2>
