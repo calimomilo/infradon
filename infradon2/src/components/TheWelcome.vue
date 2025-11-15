@@ -14,6 +14,7 @@ declare interface Post {
 
 const storage = ref()
 const postsData = ref<Post[]>([])
+const sync = ref()
 
 onMounted(() => {
   console.log('=> Composant initialisé')
@@ -26,11 +27,28 @@ const initDatabase = () => {
   if (localdb) {
     console.log('Connected to collection : ' + localdb?.name)
     storage.value = localdb
-    localdb.replicate.from('http://calimo:admin@localhost:5984/infradon2').then((_result) => {
+    localdb.replicate.from('http://calimo:admin@localhost:5984/infradon2')
+    .on('complete', syncData)
+    .then((_result) => {
       fetchData()
     })
   } else {
     console.warn('Something went wrong')
+  }
+}
+
+const syncData = () => {
+  sync.value = storage.value
+  .sync('http://calimo:admin@localhost:5984/infradon2', {live: true, retry: true})
+  .on('change', fetchData)
+};
+
+const toggle = () => {
+  if (sync.value) {
+    sync.value.cancel()
+    sync.value = null
+  } else {
+    syncData()
   }
 }
 
@@ -89,10 +107,6 @@ const updateDoc = (post: Post): any => {
     })
 }
 
-const syncData = (): any => {
-  storage.value.replicate.to('http://calimo:admin@localhost:5984/infradon2')
-}
-
 let counter = 0
 const words = [
   'léa',
@@ -118,7 +132,12 @@ const words = [
 
 <template>
   <h1>Fetch Data</h1>
-  <button @click="syncData">Synchroniser la DB</button>
+  <label class="switch">
+    <input type="checkbox" checked @click="toggle()"><span class="slider round"></span>
+  </label>
+  <label v-if="sync">Online</label>
+  <label v-else>Offline</label>
+<br>
   <button @click="createDoc">Ajouter un document</button>
   <article v-for="post in postsData" v-bind:key="(post as any).id">
     <h2>{{ post.title }}</h2>
@@ -127,3 +146,68 @@ const words = [
     <button @click="deleteDoc(post)">Effacer</button>
   </article>
 </template>
+
+<style scoped>
+ /* The switch - the box around the slider */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 30px;
+  height: 17px;
+}
+
+/* Hide default HTML checkbox */
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* The slider */
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 13px;
+  width: 13px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: #2196F3;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #2196F3;
+}
+
+input:checked + .slider:before {
+  -webkit-transform: translateX(13px);
+  -ms-transform: translateX(13px);
+  transform: translateX(13px);
+}
+
+/* Rounded sliders */
+.slider.round {
+  border-radius: 17px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+} 
+</style>
