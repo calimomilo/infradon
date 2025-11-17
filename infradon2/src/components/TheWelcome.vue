@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import PouchDB from 'pouchdb'
 
 declare interface Post {
+  _conflicts: null
   _id: string
   _rev: string
   title: string
@@ -56,10 +57,12 @@ const fetchData = (): any => {
   storage.value
     .allDocs({
       include_docs: true,
+      conflicts: true
     })
     .then((result: any) => {
       console.log('=> Données récupérées :', result.rows)
       postsData.value = result.rows.map((row: any) => row.doc)
+      console.log(postsData)
     })
     .catch((error: any) => {
       console.error('Erreur lors de la récupération des données :', error)
@@ -135,12 +138,12 @@ const words = [
   <label class="switch">
     <input type="checkbox" checked @click="toggle()"><span class="slider round"></span>
   </label>
-  <label v-if="sync">Online</label>
-  <label v-else>Offline</label>
+  <label v-if="sync"> Online</label>
+  <label v-else> Offline</label>
 <br>
   <button @click="createDoc">Ajouter un document</button>
   <article v-for="post in postsData" v-bind:key="(post as any).id">
-    <h2>{{ post.title }}</h2>
+    <h2>{{ post.title }}<span class="conflicts" v-if="post._conflicts">Attention, conflits !</span></h2>
     <p>{{ post.content }}</p>
     <button @click="updateDoc(post)">Update</button>
     <button @click="deleteDoc(post)">Effacer</button>
@@ -148,6 +151,12 @@ const words = [
 </template>
 
 <style scoped>
+.conflicts {
+  color: rgb(140, 3, 3);
+  font-style: italic;
+  font-size: small;
+}
+
  /* The switch - the box around the slider */
 .switch {
   position: relative;
