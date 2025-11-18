@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import PouchDB from 'pouchdb'
+import PouchDBFind from 'pouchdb-find'
+
+PouchDB.plugin(PouchDBFind);
 
 declare interface Post {
   _conflicts: null
@@ -28,6 +31,12 @@ const initDatabase = () => {
   if (localdb) {
     console.log('Connected to collection : ' + localdb?.name)
     storage.value = localdb
+    storage.value.createIndex({
+      index: {
+        fields: ['content']
+      }
+    })
+    .then(console.log("index created"))
     localdb.replicate.from('http://calimo:admin@localhost:5984/infradon2')
     .on('complete', syncData)
     .then((_result) => {
@@ -53,6 +62,31 @@ const toggle = () => {
   }
 }
 
+const search = (event: Event) => {
+  event.target.blur()
+
+  if (event.target.value === "") {
+    fetchData();
+  } else {
+    storage.value.find({
+      selector: {content: `Contenu du document : ${event.target.value}`}
+    })
+    .then((result: any) => {
+      console.log('=> Données récupérées :', result.docs)
+      postsData.value = result.docs
+      // console.log(postsData)
+    })
+    .catch((error: any) => {
+      console.error('Erreur lors de la récupération des données :', error)
+    })
+  }
+}
+
+const searchReset = () => {
+  document.querySelector(".search").value = ""
+  fetchData()
+}
+
 const fetchData = (): any => {
   storage.value
     .allDocs({
@@ -62,7 +96,7 @@ const fetchData = (): any => {
     .then((result: any) => {
       console.log('=> Données récupérées :', result.rows)
       postsData.value = result.rows.map((row: any) => row.doc)
-      console.log(postsData)
+      // console.log(postsData)
     })
     .catch((error: any) => {
       console.error('Erreur lors de la récupération des données :', error)
@@ -130,19 +164,25 @@ const words = [
   'liliana',
   'thierry',
   'valentin',
+  'benoît',
+  'chloé'
 ]
 </script>
 
 <template>
   <h1>Fetch Data</h1>
   <label class="switch">
-    <input type="checkbox" checked @click="toggle()"><span class="slider round"></span>
+    <input type="checkbox" checked @click="toggle"><span class="slider round"></span>
   </label>
   <label v-if="sync"> Online</label>
   <label v-else> Offline</label>
-<br>
+  <br><br>
+  <input type="text" placeholder="Search" @keyup.enter="search" class="search">
+  <button @click="searchReset">X</button>
+  <br><br>
   <button @click="createDoc">Ajouter un document</button>
   <article v-for="post in postsData" v-bind:key="(post as any).id">
+    <br>
     <h2>{{ post.title }}<span class="conflicts" v-if="post._conflicts">Attention, conflits !</span></h2>
     <p>{{ post.content }}</p>
     <button @click="updateDoc(post)">Update</button>
