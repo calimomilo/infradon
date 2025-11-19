@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import PouchDB from 'pouchdb'
 import PouchDBFind from 'pouchdb-find'
 
-PouchDB.plugin(PouchDBFind);
+PouchDB.plugin(PouchDBFind)
 
 declare interface Post {
   _conflicts: null
@@ -183,7 +183,7 @@ const words = [
   <button @click="createDoc">Ajouter un document</button>
   <article v-for="post in postsData" v-bind:key="(post as any).id">
     <br>
-    <h2>{{ post.title }}<span class="conflicts" v-if="post._conflicts">Attention, conflits !</span></h2>
+    <h2>{{ post.title }} <span class="conflicts" v-if="post._conflicts">Attention, conflits !</span></h2>
     <p>{{ post.content }}</p>
     <button @click="updateDoc(post)">Update</button>
     <button @click="deleteDoc(post)">Effacer</button>
