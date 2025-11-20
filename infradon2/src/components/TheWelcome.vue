@@ -9,8 +9,8 @@ declare interface Post {
   _conflicts: null
   _id: string
   _rev: string
-  title: string
-  content: string
+  message: string
+  author: string
   attributes: {
     creation_date: any
   }
@@ -31,12 +31,14 @@ const initDatabase = () => {
   if (localdb) {
     console.log('Connected to collection : ' + localdb?.name)
     storage.value = localdb
+
     storage.value.createIndex({
       index: {
-        fields: ['content']
+        fields: ['author']
       }
     })
     .then(console.log("index created"))
+
     localdb.replicate.from('http://calimo:admin@localhost:5984/infradon2')
     .on('complete', syncData)
     .then((_result) => {
@@ -69,7 +71,7 @@ const search = (event: Event) => {
     fetchData();
   } else {
     storage.value.find({
-      selector: {content: `Contenu du document : ${event.target.value}`}
+      selector: {author: event.target.value}
     })
     .then((result: any) => {
       console.log('=> Données récupérées :', result.docs)
@@ -91,11 +93,11 @@ const fetchData = (): any => {
   storage.value
     .allDocs({
       include_docs: true,
-      conflicts: true
+      conflicts: true,
     })
     .then((result: any) => {
       console.log('=> Données récupérées :', result.rows)
-      postsData.value = result.rows.map((row: any) => row.doc)
+      postsData.value = result.rows.filter((el: any) => !el.doc._id.startsWith("_design")).map((row: any) => row.doc)
       // console.log(postsData)
     })
     .catch((error: any) => {
@@ -104,11 +106,10 @@ const fetchData = (): any => {
 }
 
 const createDoc = (): any => {
-  counter++
   storage.value
     .post({
-      title: 'Document ' + counter,
-      content: 'Contenu du document : ' + words[Math.floor(Math.random() * words.length)],
+      message: 'New message',
+      author: words[Math.floor(Math.random() * words.length)],
     })
     .then(function (response: any) {
       fetchData()
@@ -132,7 +133,6 @@ const deleteDoc = (post: Post): any => {
 }
 
 const updateDoc = (post: Post): any => {
-  post.content = 'Contenu du document : ' + words[Math.floor(Math.random() * words.length)]
   storage.value
     .put(post)
     .then(function (response: any) {
@@ -144,7 +144,6 @@ const updateDoc = (post: Post): any => {
     })
 }
 
-let counter = 0
 const words = [
   'léa',
   'inoé',
@@ -183,8 +182,12 @@ const words = [
   <button @click="createDoc">Ajouter un document</button>
   <article v-for="post in postsData" v-bind:key="(post as any).id">
     <br>
-    <h2>{{ post.title }} <span class="conflicts" v-if="post._conflicts">Attention, conflits !</span></h2>
-    <p>{{ post.content }}</p>
+    <input type="text" v-model="post.message">
+    <select v-model="post.author">
+      <option v-for="name in words" v-bind:key="name" v-bind:value="name">{{ name }}</option>
+    </select>
+    <span class="conflicts" v-if="post._conflicts">Attention, conflits !</span>
+    <br>
     <button @click="updateDoc(post)">Update</button>
     <button @click="deleteDoc(post)">Effacer</button>
   </article>
