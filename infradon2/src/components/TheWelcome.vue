@@ -198,6 +198,7 @@ const words = [
   color: rgb(140, 3, 3);
   font-style: italic;
   font-size: small;
+  margin-left: 10px;
 }
 
  /* The switch - the box around the slider */

@@ -1,7 +1,7 @@
 @import './base.css';
 
 #app {
-  width: 600px;
+  width: 500px;
   margin: 50px auto;
   padding: 2rem;
   font-weight: normal;
@@ -28,8 +28,6 @@ a,
   }
 
   #app {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
     padding: 0 2rem;
   }
 }
