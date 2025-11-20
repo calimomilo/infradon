@@ -13,12 +13,41 @@ declare interface Post {
   author: string
   attributes: {
     creation_date: any
+    update_date: any
   }
 }
 
 const storage = ref()
 const postsData = ref<Post[]>([])
 const sync = ref()
+
+const words = [
+  'léa',
+  'inoé',
+  'camilo',
+  'teicir',
+  'yannis',
+  'elia',
+  'loann',
+  'sasita',
+  'sarah',
+  'enya',
+  'gabriel',
+  'nuno',
+  'tanguy',
+  'loic',
+  'dylan',
+  'liliana',
+  'thierry',
+  'valentin',
+  'benoît',
+  'chloé'
+]
+
+const newPost = ref({
+  message: "",
+  author: words[0]
+})
 
 onMounted(() => {
   console.log('=> Composant initialisé')
@@ -108,8 +137,12 @@ const fetchData = (): any => {
 const createDoc = (): any => {
   storage.value
     .post({
-      message: 'New message',
-      author: words[Math.floor(Math.random() * words.length)],
+      message: newPost.value.message,
+      author: newPost.value.author,
+      attributes: {
+        creation_date: Date.now(),
+        update_date: Date.now()
+      }
     })
     .then(function (response: any) {
       fetchData()
@@ -133,6 +166,7 @@ const deleteDoc = (post: Post): any => {
 }
 
 const updateDoc = (post: Post): any => {
+  post.attributes.update_date = Date.now()
   storage.value
     .put(post)
     .then(function (response: any) {
@@ -143,29 +177,6 @@ const updateDoc = (post: Post): any => {
       console.log(err)
     })
 }
-
-const words = [
-  'léa',
-  'inoé',
-  'camilo',
-  'teicir',
-  'yannis',
-  'elia',
-  'loann',
-  'sasita',
-  'sarah',
-  'enya',
-  'gabriel',
-  'nuno',
-  'tanguy',
-  'loic',
-  'dylan',
-  'liliana',
-  'thierry',
-  'valentin',
-  'benoît',
-  'chloé'
-]
 </script>
 
 <template>
@@ -176,20 +187,26 @@ const words = [
   <label v-if="sync"> Online</label>
   <label v-else> Offline</label>
   <br><br>
-  <input type="text" placeholder="Search" @keyup.enter="search" class="search">
+  <input type="text" placeholder="new message" v-model="newPost.message"/>
+  <select v-model="newPost.author">
+    <option v-for="name in words" v-bind:key="name" v-bind:value="name">{{ name }}</option>
+  </select><br>
+  <button @click="createDoc">Add message</button>
+  <br><br><hr><br>
+  <input type="text" placeholder="Search" @keyup.enter="search" class="search"/>
   <button @click="searchReset">X</button>
-  <br><br>
-  <button @click="createDoc">Ajouter un document</button>
+  <br>
   <article v-for="post in postsData" v-bind:key="(post as any).id">
     <br>
-    <input type="text" v-model="post.message">
+    <input type="text" v-model="post.message"/>
     <select v-model="post.author">
       <option v-for="name in words" v-bind:key="name" v-bind:value="name">{{ name }}</option>
     </select>
     <span class="conflicts" v-if="post._conflicts">Attention, conflits !</span>
     <br>
+    <p class="date">{{ (new Date(post.attributes.update_date)).toLocaleString() }}</p>
     <button @click="updateDoc(post)">Update</button>
-    <button @click="deleteDoc(post)">Effacer</button>
+    <button @click="deleteDoc(post)">Delete</button>
   </article>
 </template>
 
@@ -199,6 +216,11 @@ const words = [
   font-style: italic;
   font-size: small;
   margin-left: 10px;
+}
+
+.date {
+  color: gray;
+  font-size: small;
 }
 
  /* The switch - the box around the slider */
