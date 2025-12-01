@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, Comment } from 'vue'
 import PouchDB from 'pouchdb'
 import PouchDBFind from 'pouchdb-find'
 
@@ -11,6 +11,20 @@ declare interface Post {
   _rev: string
   message: string
   author: string
+  likes: number
+  attributes: {
+    creation_date: any
+    update_date: any
+  }
+}
+
+declare interface Comment {
+  _conflicts: null
+  _id: string
+  _rev: string
+  comment: string
+  author: string
+  post_id: string
   attributes: {
     creation_date: any
     update_date: any
@@ -18,8 +32,11 @@ declare interface Post {
 }
 
 const storage = ref()
+const storageComm = ref()
 const postsData = ref<Post[]>([])
+const commsData = ref<Comment[]>([])
 const sync = ref()
+const syncComm = ref()
 
 const words = [
   'léa',
@@ -41,12 +58,17 @@ const words = [
   'thierry',
   'valentin',
   'benoît',
-  'chloé'
+  'chloé',
 ]
 
 const newPost = ref({
-  message: "",
-  author: words[0]
+  message: '',
+  author: words[0],
+})
+
+const newComm = ref({
+  comment: '',
+  author: words[0],
 })
 
 onMounted(() => {
@@ -57,68 +79,100 @@ onMounted(() => {
 const initDatabase = () => {
   console.log('=> Connexion à la base de données')
   const localdb = new PouchDB('collection_infradon2')
-  if (localdb) {
-    console.log('Connected to collection : ' + localdb?.name)
+  const localdbcomm = new PouchDB('collection_commentaires')
+  if (localdb && localdbcomm) {
+    console.log('Connected to collections : ' + localdb?.name + ' and ' + localdbcomm.name)
     storage.value = localdb
+    storageComm.value = localdbcomm
 
-    storage.value.createIndex({
-      index: {
-        fields: ['author']
-      }
-    })
-    .then(console.log("index created"))
+    storage.value
+      .createIndex({
+        index: {
+          fields: ['author'],
+        },
+      })
+      .then(console.log('post author index created'))
 
-    localdb.replicate.from('http://calimo:admin@localhost:5984/infradon2')
-    .on('complete', syncData)
-    .then((_result) => {
-      fetchData()
-    })
+    storageComm.value
+      .createIndex({
+        index: {
+          fields: ['post_id'],
+        },
+      })
+      .then(console.log('comment post_id index created'))
+
+    localdb.replicate
+      .from('http://calimo:admin@localhost:5984/infradon2')
+      .on('complete', syncPostsData)
+      .then((_result) => {
+        fetchPostData()
+      })
+
+    localdbcomm.replicate
+      .from('http://calimo:admin@localhost:5984/infradon2-comms')
+      .on('complete', syncCommsData)
+      .then((_result) => {
+        fetchCommsData()
+      })
   } else {
     console.warn('Something went wrong')
   }
 }
 
-const syncData = () => {
+const syncPostsData = () => {
   sync.value = storage.value
-  .sync('http://calimo:admin@localhost:5984/infradon2', {live: true, retry: true})
-  .on('change', fetchData)
-};
+    .sync('http://calimo:admin@localhost:5984/infradon2', { live: true, retry: true })
+    .on('change', fetchPostData)
+}
+
+const syncCommsData = () => {
+  syncComm.value = storageComm.value
+    .sync('http://calimo:admin@localhost:5984/infradon2-comms', { live: true, retry: true })
+    .on('change', fetchCommsData)
+}
 
 const toggle = () => {
   if (sync.value) {
     sync.value.cancel()
     sync.value = null
   } else {
-    syncData()
+    syncPostsData()
+  }
+  if (syncComm.value) {
+    syncComm.value.cancel()
+    syncComm.value = null
+  } else {
+    syncCommsData()
   }
 }
 
 const search = (event: Event) => {
   event.target.blur()
 
-  if (event.target.value === "") {
-    fetchData();
+  if (event.target.value === '') {
+    fetchPostData()
   } else {
-    storage.value.find({
-      selector: {author: event.target.value}
-    })
-    .then((result: any) => {
-      console.log('=> Données récupérées :', result.docs)
-      postsData.value = result.docs
-      // console.log(postsData)
-    })
-    .catch((error: any) => {
-      console.error('Erreur lors de la récupération des données :', error)
-    })
+    storage.value
+      .find({
+        selector: { author: event.target.value },
+      })
+      .then((result: any) => {
+        console.log('=> Données récupérées :', result.docs)
+        postsData.value = result.docs
+        // console.log(postsData)
+      })
+      .catch((error: any) => {
+        console.error('Erreur lors de la récupération des données :', error)
+      })
   }
 }
 
 const searchReset = () => {
-  document.querySelector(".search").value = ""
-  fetchData()
+  document.querySelector('.search').value = ''
+  fetchPostData()
 }
 
-const fetchData = (): any => {
+const fetchPostData = (): any => {
   storage.value
     .allDocs({
       include_docs: true,
@@ -126,7 +180,9 @@ const fetchData = (): any => {
     })
     .then((result: any) => {
       console.log('=> Données récupérées :', result.rows)
-      postsData.value = result.rows.filter((el: any) => !el.doc._id.startsWith("_design")).map((row: any) => row.doc)
+      postsData.value = result.rows
+        .filter((el: any) => !el.doc._id.startsWith('_design'))
+        .map((row: any) => row.doc)
       // console.log(postsData)
     })
     .catch((error: any) => {
@@ -134,18 +190,36 @@ const fetchData = (): any => {
     })
 }
 
-const createDoc = (): any => {
+const fetchCommsData = (): any => {
+  storageComm.value
+    .allDocs({
+      include_docs: true,
+      conflicts: true,
+    })
+    .then((result: any) => {
+      console.log('=> Données récupérées :', result.rows)
+      commsData.value = result.rows
+        .filter((el: any) => !el.doc._id.startsWith('_design'))
+        .map((row: any) => row.doc)
+      // console.log(postsData)
+    })
+    .catch((error: any) => {
+      console.error('Erreur lors de la récupération des données :', error)
+    })
+}
+
+const createPost = (): any => {
   storage.value
     .post({
       message: newPost.value.message,
       author: newPost.value.author,
       attributes: {
         creation_date: Date.now(),
-        update_date: Date.now()
-      }
+        update_date: Date.now(),
+      },
     })
     .then(function (response: any) {
-      fetchData()
+      fetchPostData()
       console.log(response)
     })
     .catch(function (err: any) {
@@ -153,24 +227,87 @@ const createDoc = (): any => {
     })
 }
 
-const deleteDoc = (post: Post): any => {
+const createComm = (post: Post): any => {
+  storageComm.value
+    .post({
+      comment: newComm.value.comment,
+      author: newComm.value.author,
+      post_id: post._id,
+      attributes: {
+        creation_date: Date.now(),
+        update_date: Date.now(),
+      },
+    })
+    .then(function (response: any) {
+      fetchCommsData()
+      console.log(response)
+    })
+    .catch(function (err: any) {
+      console.log(err)
+    })
+}
+
+const deletePost = (post: Post): any => {
   storage.value
     .remove(post)
-    .then(function (response: any) {
-      fetchData()
+    .then((response: any) => {
+      fetchPostData()
       console.log(response)
     })
-    .catch(function (err: any) {
+    .catch((err: any) => {
+      console.log(err)
+    })
+
+  storageComm.value
+    .find({
+      selector: { post_id: post._id },
+    })
+    .then((result: any) => {
+      result.docs.map((el: any) => {
+        storageComm.value
+          .remove(el)
+          .then((response: any) => {
+            fetchCommsData()
+            console.log(response)
+          })
+          .catch((err: any) => {
+            console.log(err)
+          })
+      })
+    })
+}
+
+const deleteComm = (comm: Comment): any => {
+  storageComm.value
+    .remove(comm)
+    .then((response: any) => {
+      fetchCommsData()
+      console.log(response)
+    })
+    .catch((err: any) => {
       console.log(err)
     })
 }
 
-const updateDoc = (post: Post): any => {
+const updatePost = (post: Post): any => {
   post.attributes.update_date = Date.now()
   storage.value
     .put(post)
     .then(function (response: any) {
-      fetchData()
+      fetchPostData()
+      console.log(response)
+    })
+    .catch(function (err: any) {
+      console.log(err)
+    })
+}
+
+const updateComm = (comm: Comment): any => {
+  comm.attributes.update_date = Date.now()
+  storageComm.value
+    .put(comm)
+    .then(function (response: any) {
+      fetchCommsData()
       console.log(response)
     })
     .catch(function (err: any) {
@@ -182,31 +319,33 @@ const updateDoc = (post: Post): any => {
 <template>
   <h1>Fetch Data</h1>
   <label class="switch">
-    <input type="checkbox" checked @click="toggle"><span class="slider round"></span>
+    <input type="checkbox" checked @click="toggle" /><span class="slider round"></span>
   </label>
   <label v-if="sync"> Online</label>
   <label v-else> Offline</label>
-  <br><br>
-  <input type="text" placeholder="new message" v-model="newPost.message"/>
+  <br /><br />
+  <input type="text" placeholder="new message" v-model="newPost.message" />
   <select v-model="newPost.author">
-    <option v-for="name in words" v-bind:key="name" v-bind:value="name">{{ name }}</option>
-  </select><br>
-  <button @click="createDoc">Add message</button>
-  <br><br><hr><br>
-  <input type="text" placeholder="Search" @keyup.enter="search" class="search"/>
+    <option v-for="name in words" v-bind:key="name" v-bind:value="name">{{ name }}</option></select
+  ><br />
+  <button @click="createPost">Add message</button>
+  <br /><br />
+  <hr />
+  <br />
+  <input type="text" placeholder="Search" @keyup.enter="search" class="search" />
   <button @click="searchReset">X</button>
-  <br>
+  <br />
   <article v-for="post in postsData" v-bind:key="(post as any).id">
-    <br>
-    <input type="text" v-model="post.message"/>
+    <br />
+    <input type="text" v-model="post.message" />
     <select v-model="post.author">
       <option v-for="name in words" v-bind:key="name" v-bind:value="name">{{ name }}</option>
     </select>
     <span class="conflicts" v-if="post._conflicts">Attention, conflits !</span>
-    <br>
-    <p class="date">{{ (new Date(post.attributes.update_date)).toLocaleString() }}</p>
-    <button @click="updateDoc(post)">Update</button>
-    <button @click="deleteDoc(post)">Delete</button>
+    <br />
+    <p class="date">{{ new Date(post.attributes.update_date).toLocaleString() }}</p>
+    <button @click="updatePost(post)">Update</button>
+    <button @click="deletePost(post)">Delete</button>
   </article>
 </template>
 
@@ -223,7 +362,7 @@ const updateDoc = (post: Post): any => {
   font-size: small;
 }
 
- /* The switch - the box around the slider */
+/* The switch - the box around the slider */
 .switch {
   position: relative;
   display: inline-block;
@@ -247,28 +386,28 @@ const updateDoc = (post: Post): any => {
   right: 0;
   bottom: 0;
   background-color: #ccc;
-  -webkit-transition: .4s;
-  transition: .4s;
+  -webkit-transition: 0.4s;
+  transition: 0.4s;
 }
 
 .slider:before {
   position: absolute;
-  content: "";
+  content: '';
   height: 13px;
   width: 13px;
   left: 2px;
   bottom: 2px;
   background-color: white;
-  -webkit-transition: .4s;
-  transition: .4s;
+  -webkit-transition: 0.4s;
+  transition: 0.4s;
 }
 
 input:checked + .slider {
-  background-color: #2196F3;
+  background-color: #2196f3;
 }
 
 input:focus + .slider {
-  box-shadow: 0 0 1px #2196F3;
+  box-shadow: 0 0 1px #2196f3;
 }
 
 input:checked + .slider:before {
@@ -284,5 +423,5 @@ input:checked + .slider:before {
 
 .slider.round:before {
   border-radius: 50%;
-} 
+}
 </style>
