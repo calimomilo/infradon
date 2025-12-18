@@ -110,14 +110,14 @@ const initDatabase = () => {
       .then(console.log('comment post_id index created'))
 
     localdb.replicate
-      .from('http://calimo:admin@localhost:5984/infradon2')
+      .from('http://calimo:admin@localhost:5984/posts-db-camilo')
       .on('complete', syncPostsData)
       .then((_result) => {
         fetchPostData()
       })
 
     localdbcomm.replicate
-      .from('http://calimo:admin@localhost:5984/infradon2-comms')
+      .from('http://calimo:admin@localhost:5984/comments-db-camilo')
       .on('complete', syncCommsData)
       .then((_result) => {
         //fetchCommsData()
@@ -129,13 +129,13 @@ const initDatabase = () => {
 
 const syncPostsData = () => {
   sync.value = storage.value
-    .sync('http://calimo:admin@localhost:5984/infradon2', { live: true, retry: true })
+    .sync('http://calimo:admin@localhost:5984/posts-db-camilo', { live: true, retry: true })
     .on('change', fetchPostData)
 }
 
 const syncCommsData = () => {
   syncComm.value = storageComm.value
-    .sync('http://calimo:admin@localhost:5984/infradon2-comms', { live: true, retry: true })
+    .sync('http://calimo:admin@localhost:5984/comments-db-camilo', { live: true, retry: true })
     .on('change', fetchCommsData)
 }
 
@@ -182,16 +182,18 @@ const searchReset = () => {
 
 const fetchPostData = (): any => {
   storage.value
-    .allDocs({
-      include_docs: true,
+    .find({
+      selector: { likes: {$gte: null}},
       conflicts: true,
+      sort: [{'likes': 'desc'}], 
+      limit: 10,
     })
     .then((result: any) => {
       console.log('=> Données récupérées :', result.rows)
-      postsData.value = result.rows
-        .filter((el: any) => !el.doc._id.startsWith('_design'))
-        .map((row: any) => row.doc)
-      // console.log(postsData)
+      postsData.value = result.docs
+      //   .filter((el: any) => !el.doc._id.startsWith('_design'))
+      //   .map((row: any) => row.doc)
+      // console.log(postsData.value)
     })
     .catch((error: any) => {
       console.error('Erreur lors de la récupération des données :', error)
@@ -202,14 +204,15 @@ const fetchCommsData = (post: Post): any => {
   storageComm.value
     .find({
       selector: { post_id: post._id },
+      conflicts: true,
     })
     .then((result: any) => {
       console.log('=> Données récupérées :', result.docs)
       commsData.value = result.docs
         //.filter((el: any) => !el.doc._id.startsWith('_design'))
         //.map((row: any) => row.doc)
-      // console.log(commsData)
-      return commsData
+      console.log(commsData.value)
+      return commsData.value
     })
     .catch((error: any) => {
       console.error('Erreur lors de la récupération des données :', error)
@@ -228,6 +231,8 @@ const createPost = (): any => {
       },
     })
     .then(function (response: any) {
+      newPost.value.message = ''
+      newPost.value.author = words[0]
       fetchPostData()
       console.log(response)
     })
@@ -248,7 +253,7 @@ const createComm = (post: Post): any => {
       },
     })
     .then(function (response: any) {
-      fetchCommsData()
+      //fetchCommsData(post)
       console.log(response)
     })
     .catch(function (err: any) {
@@ -276,7 +281,7 @@ const deletePost = (post: Post): any => {
         storageComm.value
           .remove(el)
           .then((response: any) => {
-            fetchCommsData()
+            //fetchCommsData()
             console.log(response)
           })
           .catch((err: any) => {
@@ -290,7 +295,7 @@ const deleteComm = (comm: Comment): any => {
   storageComm.value
     .remove(comm)
     .then((response: any) => {
-      fetchCommsData()
+      //fetchCommsData()
       console.log(response)
     })
     .catch((err: any) => {
@@ -316,12 +321,33 @@ const updateComm = (comm: Comment): any => {
   storageComm.value
     .put(comm)
     .then(function (response: any) {
-      fetchCommsData()
+      //fetchCommsData()
       console.log(response)
     })
     .catch(function (err: any) {
       console.log(err)
     })
+}
+
+const likePost = (post: Post) : any => {
+  post.likes += 1;
+  storage.value
+    .put(post)
+    .then(function (response: any) {
+      fetchPostData()
+      console.log(response)
+    })
+    .catch(function (err: any) {
+      console.log(err)
+    })
+}
+
+const populatePosts = (amount: number): any => {
+  for (let i = 0; i < amount; i++) {
+    newPost.value.message = Math.random()*1000000000 + "a"
+    newPost.value.author = words[Math.floor(Math.random()*words.length)]
+    createPost()
+  }
 }
 </script>
 
@@ -338,6 +364,8 @@ const updateComm = (comm: Comment): any => {
     <option v-for="name in words" v-bind:key="name" v-bind:value="name">{{ name }}</option></select
   ><br />
   <button @click="createPost">Add message</button>
+  <button @click="populatePosts(10)">Add 10 messages</button>
+  <button @click="populatePosts(50)">Add 50 messages</button>
   <br /><br />
   <hr />
   <br />
@@ -357,11 +385,19 @@ const updateComm = (comm: Comment): any => {
       <p class="date">{{ post.likes}} likes</p>
       <button @click="updatePost(post)">Update</button>
       <button @click="deletePost(post)">Delete</button>
-      <button @click="post.likes+=1">Like</button>
+      <button @click="likePost(post)">Like</button>
+      <hr />
+      <p>Comments : </p>
+      <input type="text" placeholder="new comment" v-model="newComm.comment" />
+      <select v-model="newComm.author">
+        <option v-for="name in words" v-bind:key="name" v-bind:value="name">{{ name }}</option></select
+      ><br />
+      <button @click="createComm(post)">Add message</button>
+      <br />
       <article v-for="comm in fetchCommsData(post)" v-bind:key="(comm as any).id">
         <br />
         <div class="box">
-          <input type="text" v-model="comm.message" />
+          <input type="text" v-model="comm.comment" />
           <select v-model="comm.author">
             <option v-for="name in words" v-bind:key="name" v-bind:value="name">{{ name }}</option>
           </select>
@@ -393,6 +429,10 @@ const updateComm = (comm: Comment): any => {
   padding: 10px;
   border-radius: 2px;
   background-color: rgba(250, 250, 250, 0.1);
+}
+
+hr {
+  margin: 15px 0 5px 0;
 }
 
 /* The switch - the box around the slider */
