@@ -93,6 +93,14 @@ const initDatabase = () => {
       })
       .then(console.log('post author index created'))
 
+    storage.value
+      .createIndex({
+        index: {
+          fields: ['likes'],
+        },
+      })
+      .then(console.log('post likes index created'))
+
     storageComm.value
       .createIndex({
         index: {
@@ -112,7 +120,7 @@ const initDatabase = () => {
       .from('http://calimo:admin@localhost:5984/infradon2-comms')
       .on('complete', syncCommsData)
       .then((_result) => {
-        fetchCommsData()
+        //fetchCommsData()
       })
   } else {
     console.warn('Something went wrong')
@@ -190,18 +198,18 @@ const fetchPostData = (): any => {
     })
 }
 
-const fetchCommsData = (): any => {
+const fetchCommsData = (post: Post): any => {
   storageComm.value
-    .allDocs({
-      include_docs: true,
-      conflicts: true,
+    .find({
+      selector: { post_id: post._id },
     })
     .then((result: any) => {
-      console.log('=> Données récupérées :', result.rows)
-      commsData.value = result.rows
-        .filter((el: any) => !el.doc._id.startsWith('_design'))
-        .map((row: any) => row.doc)
-      // console.log(postsData)
+      console.log('=> Données récupérées :', result.docs)
+      commsData.value = result.docs
+        //.filter((el: any) => !el.doc._id.startsWith('_design'))
+        //.map((row: any) => row.doc)
+      // console.log(commsData)
+      return commsData
     })
     .catch((error: any) => {
       console.error('Erreur lors de la récupération des données :', error)
@@ -213,6 +221,7 @@ const createPost = (): any => {
     .post({
       message: newPost.value.message,
       author: newPost.value.author,
+      likes: 0,
       attributes: {
         creation_date: Date.now(),
         update_date: Date.now(),
@@ -337,15 +346,33 @@ const updateComm = (comm: Comment): any => {
   <br />
   <article v-for="post in postsData" v-bind:key="(post as any).id">
     <br />
-    <input type="text" v-model="post.message" />
-    <select v-model="post.author">
-      <option v-for="name in words" v-bind:key="name" v-bind:value="name">{{ name }}</option>
-    </select>
-    <span class="conflicts" v-if="post._conflicts">Attention, conflits !</span>
-    <br />
-    <p class="date">{{ new Date(post.attributes.update_date).toLocaleString() }}</p>
-    <button @click="updatePost(post)">Update</button>
-    <button @click="deletePost(post)">Delete</button>
+    <div class="box">
+      <input type="text" v-model="post.message" />
+      <select v-model="post.author">
+        <option v-for="name in words" v-bind:key="name" v-bind:value="name">{{ name }}</option>
+      </select>
+      <span class="conflicts" v-if="post._conflicts">Attention, conflits !</span>
+      <br />
+      <p class="date">{{ new Date(post.attributes.update_date).toLocaleString() }}</p>
+      <p class="date">{{ post.likes}} likes</p>
+      <button @click="updatePost(post)">Update</button>
+      <button @click="deletePost(post)">Delete</button>
+      <button @click="post.likes+=1">Like</button>
+      <article v-for="comm in fetchCommsData(post)" v-bind:key="(comm as any).id">
+        <br />
+        <div class="box">
+          <input type="text" v-model="comm.message" />
+          <select v-model="comm.author">
+            <option v-for="name in words" v-bind:key="name" v-bind:value="name">{{ name }}</option>
+          </select>
+          <span class="conflicts" v-if="comm._conflicts">Attention, conflits !</span>
+          <br />
+          <p class="date">{{ new Date(comm.attributes.update_date).toLocaleString() }}</p>
+          <button @click="updateComm(comm)">Update</button>
+          <button @click="deleteComm(comm)">Delete</button>
+        </div>
+      </article>
+    </div>
   </article>
 </template>
 
@@ -360,6 +387,12 @@ const updateComm = (comm: Comment): any => {
 .date {
   color: gray;
   font-size: small;
+}
+
+.box {
+  padding: 10px;
+  border-radius: 2px;
+  background-color: rgba(250, 250, 250, 0.1);
 }
 
 /* The switch - the box around the slider */
