@@ -13,6 +13,7 @@ declare interface Post {
   author: string
   likes: number
   comments: Comment[]
+  loaded_comments: string
   attributes: {
     creation_date: any
     update_date: any
@@ -38,6 +39,9 @@ const postsData = ref<Post[]>([])
 const commsData = ref<Comment[]>([])
 const sync = ref()
 const syncComm = ref()
+
+let postsReplicated = false
+let commsReplicated = false
 
 const words = [
   'léa',
@@ -111,17 +115,25 @@ const initDatabase = () => {
       .from('http://calimo:admin@localhost:5984/posts-db-camilo')
       .on('complete', syncPostsData)
       .then((_result) => {
-        fetchPostData()
+        postsReplicated = true
+        checkReplicated()
       })
 
     localdbcomm.replicate
       .from('http://calimo:admin@localhost:5984/comments-db-camilo')
       .on('complete', syncCommsData)
       .then((_result) => {
-        //fetchCommsData()
+        commsReplicated = true
+        checkReplicated()
       })
   } else {
     console.warn('Something went wrong')
+  }
+}
+
+const checkReplicated = () => {
+  if (postsReplicated && commsReplicated) {
+    fetchPostData()
   }
 }
 
@@ -196,34 +208,56 @@ const fetchPostData = (): any => {
 
       postsData.value.forEach((post: Post) => {
         newComms.value.set(post._id, { comment: '', author: words[0] })
+
+        if (post.loaded_comments === undefined) {
+          post.loaded_comments = 'last'
+        }
+
+        fetchCommsData(post)
       })
-      //   .filter((el: any) => !el.doc._id.startsWith('_design'))
-      //   .map((row: any) => row.doc)
-      // console.log(postsData.value)
     })
     .catch((error: any) => {
       console.error('Erreur lors de la récupération des données :', error)
     })
 }
 
-const fetchAllCommsData = (post: Post): any => {
-  storageComm.value
-    .find({
-      selector: { post_id: post._id },
-      conflicts: true,
-      sort: ['post_id', 'update_date'],
-    })
-    .then((result: any) => {
-      console.log('=> Données récupérées :', result.docs)
-      commsData.value = result.docs
-      //.filter((el: any) => !el.doc._id.startsWith('_design'))
-      //.map((row: any) => row.doc)
-      console.log(commsData.value)
-      return commsData.value
-    })
-    .catch((error: any) => {
-      console.error('Erreur lors de la récupération des données :', error)
-    })
+const fetchCommsData = (post: Post): any => {
+  if (post.loaded_comments === 'last') {
+    storageComm.value
+      .find({
+        selector: { post_id: post._id, update_date: { $gte: null } },
+        conflicts: true,
+        sort: ['post_id', { update_date: 'asc' }],
+        limit: 1,
+      })
+      .then((result: any) => {
+        console.log('=> Données commentaires récupérées :', result.docs)
+        post.comments = result.docs
+      })
+      .catch((error: any) => {
+        console.error('Erreur lors de la récupération des données :', error)
+      })
+  } else if (post.loaded_comments === 'all') {
+    storageComm.value
+      .find({
+        selector: { post_id: post._id, update_date: { $gte: null } },
+        conflicts: true,
+        sort: ['post_id', { update_date: 'desc' }],
+      })
+      .then((result: any) => {
+        console.log('=> Données commentaires récupérées :', result.docs)
+        post.comments = result.docs
+      })
+      .catch((error: any) => {
+        console.error('Erreur lors de la récupération des données :', error)
+      })
+  }
+}
+
+const toggleComms = (post: Post): any => {
+  post.loaded_comments = post.loaded_comments === 'last' ? 'all' : 'last'
+  console.log(post.loaded_comments)
+  fetchCommsData(post)
 }
 
 const createPost = (): any => {
@@ -260,8 +294,9 @@ const createComm = (post: Post): any => {
       },
     })
     .then(function (response: any) {
-      //fetchCommsData(post)
       console.log(response)
+      newComms.value.set(post._id, { comment: '', author: words[0] })
+      fetchPostData()
     })
     .catch(function (err: any) {
       console.log(err)
@@ -403,7 +438,7 @@ const populatePosts = (amount: number): any => {
       ><br />
       <button @click="createComm(post)">Add comment</button>
       <br />
-      <article v-for="comm in fetchAllCommsData(post)" v-bind:key="(comm as any).id">
+      <article v-for="comm in post.comments" v-bind:key="(comm as any).id">
         <br />
         <div class="box">
           <input type="text" v-model="comm.comment" />
@@ -417,6 +452,11 @@ const populatePosts = (amount: number): any => {
           <button @click="deleteComm(comm)">Delete</button>
         </div>
       </article>
+      <br />
+      <button @click="toggleComms(post)">
+        <p v-if="post.loaded_comments === 'last'">Load all comments</p>
+        <p v-else>Collapse comments</p>
+      </button>
     </div>
   </article>
 </template>
