@@ -12,6 +12,7 @@ declare interface Post {
   message: string
   author: string
   likes: number
+  comments: Comment[]
   attributes: {
     creation_date: any
     update_date: any
@@ -66,10 +67,7 @@ const newPost = ref({
   author: words[0],
 })
 
-const newComm = ref({
-  comment: '',
-  author: words[0],
-})
+const newComms = ref(new Map())
 
 onMounted(() => {
   console.log('=> Composant initialisé')
@@ -104,7 +102,7 @@ const initDatabase = () => {
     storageComm.value
       .createIndex({
         index: {
-          fields: ['post_id'],
+          fields: ['post_id', 'update_date'],
         },
       })
       .then(console.log('comment post_id index created'))
@@ -128,15 +126,19 @@ const initDatabase = () => {
 }
 
 const syncPostsData = () => {
-  sync.value = storage.value
-    .sync('http://calimo:admin@localhost:5984/posts-db-camilo', { live: true, retry: true })
-    .on('change', fetchPostData)
+  sync.value = storage.value.sync('http://calimo:admin@localhost:5984/posts-db-camilo', {
+    live: true,
+    retry: true,
+  })
+  //.on('change', fetchPostData)
 }
 
 const syncCommsData = () => {
-  syncComm.value = storageComm.value
-    .sync('http://calimo:admin@localhost:5984/comments-db-camilo', { live: true, retry: true })
-    .on('change', fetchCommsData)
+  syncComm.value = storageComm.value.sync('http://calimo:admin@localhost:5984/comments-db-camilo', {
+    live: true,
+    retry: true,
+  })
+  //.on('change', fetchAllCommsData)
 }
 
 const toggle = () => {
@@ -183,14 +185,18 @@ const searchReset = () => {
 const fetchPostData = (): any => {
   storage.value
     .find({
-      selector: { likes: {$gte: null}},
+      selector: { likes: { $gte: null } },
       conflicts: true,
-      sort: [{'likes': 'desc'}], 
+      sort: [{ likes: 'desc' }],
       limit: 10,
     })
     .then((result: any) => {
       console.log('=> Données récupérées :', result.rows)
       postsData.value = result.docs
+
+      postsData.value.forEach((post: Post) => {
+        newComms.value.set(post._id, { comment: '', author: words[0] })
+      })
       //   .filter((el: any) => !el.doc._id.startsWith('_design'))
       //   .map((row: any) => row.doc)
       // console.log(postsData.value)
@@ -200,17 +206,18 @@ const fetchPostData = (): any => {
     })
 }
 
-const fetchCommsData = (post: Post): any => {
+const fetchAllCommsData = (post: Post): any => {
   storageComm.value
     .find({
       selector: { post_id: post._id },
       conflicts: true,
+      sort: ['post_id', 'update_date'],
     })
     .then((result: any) => {
       console.log('=> Données récupérées :', result.docs)
       commsData.value = result.docs
-        //.filter((el: any) => !el.doc._id.startsWith('_design'))
-        //.map((row: any) => row.doc)
+      //.filter((el: any) => !el.doc._id.startsWith('_design'))
+      //.map((row: any) => row.doc)
       console.log(commsData.value)
       return commsData.value
     })
@@ -244,8 +251,8 @@ const createPost = (): any => {
 const createComm = (post: Post): any => {
   storageComm.value
     .post({
-      comment: newComm.value.comment,
-      author: newComm.value.author,
+      comment: newComms.value.get(post._id).comment,
+      author: newComms.value.get(post._id).author,
       post_id: post._id,
       attributes: {
         creation_date: Date.now(),
@@ -329,8 +336,8 @@ const updateComm = (comm: Comment): any => {
     })
 }
 
-const likePost = (post: Post) : any => {
-  post.likes += 1;
+const likePost = (post: Post): any => {
+  post.likes += 1
   storage.value
     .put(post)
     .then(function (response: any) {
@@ -344,8 +351,8 @@ const likePost = (post: Post) : any => {
 
 const populatePosts = (amount: number): any => {
   for (let i = 0; i < amount; i++) {
-    newPost.value.message = Math.random()*1000000000 + "a"
-    newPost.value.author = words[Math.floor(Math.random()*words.length)]
+    newPost.value.message = Math.random() * 1000000000 + 'a'
+    newPost.value.author = words[Math.floor(Math.random() * words.length)]
     createPost()
   }
 }
@@ -382,19 +389,21 @@ const populatePosts = (amount: number): any => {
       <span class="conflicts" v-if="post._conflicts">Attention, conflits !</span>
       <br />
       <p class="date">{{ new Date(post.attributes.update_date).toLocaleString() }}</p>
-      <p class="date">{{ post.likes}} likes</p>
+      <p class="date">{{ post.likes }} likes</p>
       <button @click="updatePost(post)">Update</button>
       <button @click="deletePost(post)">Delete</button>
       <button @click="likePost(post)">Like</button>
       <hr />
-      <p>Comments : </p>
-      <input type="text" placeholder="new comment" v-model="newComm.comment" />
-      <select v-model="newComm.author">
-        <option v-for="name in words" v-bind:key="name" v-bind:value="name">{{ name }}</option></select
+      <p>Comments :</p>
+      <input type="text" placeholder="new comment" v-model="newComms.get(post._id).comment" />
+      <select v-model="newComms.get(post._id).author">
+        <option v-for="name in words" v-bind:key="name" v-bind:value="name">
+          {{ name }}
+        </option></select
       ><br />
-      <button @click="createComm(post)">Add message</button>
+      <button @click="createComm(post)">Add comment</button>
       <br />
-      <article v-for="comm in fetchCommsData(post)" v-bind:key="(comm as any).id">
+      <article v-for="comm in fetchAllCommsData(post)" v-bind:key="(comm as any).id">
         <br />
         <div class="box">
           <input type="text" v-model="comm.comment" />
