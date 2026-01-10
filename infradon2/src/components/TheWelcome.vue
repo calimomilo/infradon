@@ -2,7 +2,6 @@
 import { ref, onMounted, Comment } from 'vue'
 import PouchDB from 'pouchdb'
 import PouchDBFind from 'pouchdb-find'
-import { classicNameResolver } from 'typescript'
 
 PouchDB.plugin(PouchDBFind)
 
@@ -396,6 +395,38 @@ const likePost = (post: Post): any => {
     })
 }
 
+const addAttachment = (post: Post): any => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*, video/*'
+
+  input.onchange = (e: any) => {
+    const file = e.target?.files?.[0]
+    if (!file) return
+
+    console.log('Fichier sélectionné:', file.name, file.type, file.size)
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert(
+        '⚠️ Fichier trop volumineux (max 5MB). Pour des fichiers plus gros, utilisez un service cloud.',
+      )
+      return
+    }
+
+    storage.value
+      .putAttachment(post._id, file.name, post._rev, file, file.type)
+      .then((response: any) => {
+        fetchPostData()
+        console.log(response)
+      })
+      .catch(function (err: any) {
+        console.log(err)
+      })
+  }
+
+  input.click()
+}
+
 const populatePosts = (amount: number): any => {
   for (let i = 0; i < amount; i++) {
     newPost.value.message = Math.random() * 1000000000 + 'a'
@@ -437,6 +468,7 @@ const populatePosts = (amount: number): any => {
       <br />
       <p class="date">{{ new Date(post.update_date).toLocaleString() }}</p>
       <p class="date">{{ post.likes }} likes</p>
+      <button @click="addAttachment(post)">Add attachment</button>
       <button @click="updatePost(post)">Update</button>
       <button @click="deletePost(post)">Delete</button>
       <button @click="likePost(post)">Like</button>
