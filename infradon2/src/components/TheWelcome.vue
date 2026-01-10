@@ -36,7 +36,6 @@ declare interface Comment {
 const storage = ref()
 const storageComm = ref()
 const postsData = ref<Post[]>([])
-const commsData = ref<Comment[]>([])
 const sync = ref()
 const syncComm = ref()
 
@@ -333,11 +332,11 @@ const deletePost = (post: Post): any => {
     })
 }
 
-const deleteComm = (comm: Comment): any => {
+const deleteComm = (comm: Comment, post: Post): any => {
   storageComm.value
     .remove(comm)
     .then((response: any) => {
-      //fetchCommsData()
+      fetchCommsData(post)
       console.log(response)
     })
     .catch((err: any) => {
@@ -358,12 +357,12 @@ const updatePost = (post: Post): any => {
     })
 }
 
-const updateComm = (comm: Comment): any => {
+const updateComm = (comm: Comment, post: Post): any => {
   comm.attributes.update_date = Date.now()
   storageComm.value
     .put(comm)
     .then(function (response: any) {
-      //fetchCommsData()
+      fetchCommsData(post)
       console.log(response)
     })
     .catch(function (err: any) {
@@ -448,8 +447,8 @@ const populatePosts = (amount: number): any => {
           <span class="conflicts" v-if="comm._conflicts">Attention, conflits !</span>
           <br />
           <p class="date">{{ new Date(comm.attributes.update_date).toLocaleString() }}</p>
-          <button @click="updateComm(comm)">Update</button>
-          <button @click="deleteComm(comm)">Delete</button>
+          <button @click="updateComm(comm, post)">Update</button>
+          <button @click="deleteComm(comm, post)">Delete</button>
         </div>
       </article>
       <br />
