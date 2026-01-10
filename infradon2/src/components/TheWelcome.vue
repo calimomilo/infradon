@@ -2,6 +2,7 @@
 import { ref, onMounted, Comment } from 'vue'
 import PouchDB from 'pouchdb'
 import PouchDBFind from 'pouchdb-find'
+import { classicNameResolver } from 'typescript'
 
 PouchDB.plugin(PouchDBFind)
 
@@ -14,10 +15,8 @@ declare interface Post {
   likes: number
   comments: Comment[]
   loaded_comments: string
-  attributes: {
-    creation_date: any
-    update_date: any
-  }
+  creation_date: any
+  update_date: any
 }
 
 declare interface Comment {
@@ -27,10 +26,8 @@ declare interface Comment {
   comment: string
   author: string
   post_id: string
-  attributes: {
-    creation_date: any
-    update_date: any
-  }
+  creation_date: any
+  update_date: any
 }
 
 const storage = ref()
@@ -39,6 +36,7 @@ const postsData = ref<Post[]>([])
 const sync = ref()
 const syncComm = ref()
 
+let postsLoaded = 10
 let postsReplicated = false
 let commsReplicated = false
 
@@ -180,7 +178,16 @@ const search = (event: Event) => {
       .then((result: any) => {
         console.log('=> Données récupérées :', result.docs)
         postsData.value = result.docs
-        // console.log(postsData)
+
+        postsData.value.forEach((post: Post) => {
+          newComms.value.set(post._id, { comment: '', author: words[0] })
+
+          if (post.loaded_comments === undefined) {
+            post.loaded_comments = 'last'
+          }
+
+          fetchCommsData(post)
+        })
       })
       .catch((error: any) => {
         console.error('Erreur lors de la récupération des données :', error)
@@ -199,7 +206,7 @@ const fetchPostData = (): any => {
       selector: { likes: { $gte: null } },
       conflicts: true,
       sort: [{ likes: 'desc' }],
-      limit: 10,
+      limit: postsLoaded,
     })
     .then((result: any) => {
       console.log('=> Données récupérées :', result.rows)
@@ -226,7 +233,7 @@ const fetchCommsData = (post: Post): any => {
       .find({
         selector: { post_id: post._id, update_date: { $gte: null } },
         conflicts: true,
-        sort: ['post_id', { update_date: 'asc' }],
+        sort: ['post_id', { update_date: 'desc' }],
         limit: 1,
       })
       .then((result: any) => {
@@ -241,7 +248,7 @@ const fetchCommsData = (post: Post): any => {
       .find({
         selector: { post_id: post._id, update_date: { $gte: null } },
         conflicts: true,
-        sort: ['post_id', { update_date: 'desc' }],
+        sort: ['post_id', { update_date: 'asc' }],
       })
       .then((result: any) => {
         console.log('=> Données commentaires récupérées :', result.docs)
@@ -259,16 +266,24 @@ const toggleComms = (post: Post): any => {
   fetchCommsData(post)
 }
 
+const loadMorePosts = (): any => {
+  postsLoaded += 10
+  fetchPostData()
+}
+
+const collapsePosts = (): any => {
+  postsLoaded = 10
+  fetchPostData()
+}
+
 const createPost = (): any => {
   storage.value
     .post({
       message: newPost.value.message,
       author: newPost.value.author,
       likes: 0,
-      attributes: {
-        creation_date: Date.now(),
-        update_date: Date.now(),
-      },
+      creation_date: Date.now(),
+      update_date: Date.now(),
     })
     .then(function (response: any) {
       newPost.value.message = ''
@@ -287,10 +302,8 @@ const createComm = (post: Post): any => {
       comment: newComms.value.get(post._id).comment,
       author: newComms.value.get(post._id).author,
       post_id: post._id,
-      attributes: {
-        creation_date: Date.now(),
-        update_date: Date.now(),
-      },
+      creation_date: Date.now(),
+      update_date: Date.now(),
     })
     .then(function (response: any) {
       console.log(response)
@@ -345,7 +358,7 @@ const deleteComm = (comm: Comment, post: Post): any => {
 }
 
 const updatePost = (post: Post): any => {
-  post.attributes.update_date = Date.now()
+  post.update_date = Date.now()
   storage.value
     .put(post)
     .then(function (response: any) {
@@ -358,7 +371,7 @@ const updatePost = (post: Post): any => {
 }
 
 const updateComm = (comm: Comment, post: Post): any => {
-  comm.attributes.update_date = Date.now()
+  comm.update_date = Date.now()
   storageComm.value
     .put(comm)
     .then(function (response: any) {
@@ -422,7 +435,7 @@ const populatePosts = (amount: number): any => {
       </select>
       <span class="conflicts" v-if="post._conflicts">Attention, conflits !</span>
       <br />
-      <p class="date">{{ new Date(post.attributes.update_date).toLocaleString() }}</p>
+      <p class="date">{{ new Date(post.update_date).toLocaleString() }}</p>
       <p class="date">{{ post.likes }} likes</p>
       <button @click="updatePost(post)">Update</button>
       <button @click="deletePost(post)">Delete</button>
@@ -446,7 +459,7 @@ const populatePosts = (amount: number): any => {
           </select>
           <span class="conflicts" v-if="comm._conflicts">Attention, conflits !</span>
           <br />
-          <p class="date">{{ new Date(comm.attributes.update_date).toLocaleString() }}</p>
+          <p class="date">{{ new Date(comm.update_date).toLocaleString() }}</p>
           <button @click="updateComm(comm, post)">Update</button>
           <button @click="deleteComm(comm, post)">Delete</button>
         </div>
@@ -458,6 +471,9 @@ const populatePosts = (amount: number): any => {
       </button>
     </div>
   </article>
+  <br />
+  <button v-if="postsData.length === postsLoaded" @click="loadMorePosts">Load more posts</button>
+  <button v-if="postsLoaded !== 10" @click="collapsePosts">Collapse posts</button>
 </template>
 
 <style scoped>
