@@ -12,10 +12,9 @@ declare interface Post {
   message: string
   author: string
   likes: number
-  comments: Comment[]
-  loaded_comments: string
   creation_date: any
   update_date: any
+  _attachments: any
 }
 
 declare interface Comment {
@@ -28,6 +27,15 @@ declare interface Comment {
   creation_date: any
   update_date: any
 }
+
+// declare interface postComm {
+//   new_comm: {
+//     comment: string
+//     author: string
+//   }
+//   comments: Comment[]
+//   loaded_comms: string
+// }
 
 const storage = ref()
 const storageComm = ref()
@@ -67,7 +75,8 @@ const newPost = ref({
   author: words[0],
 })
 
-const newComms = ref(new Map())
+const postComms = ref()
+postComms.value = {}
 
 onMounted(() => {
   console.log('=> Composant initialisé')
@@ -179,10 +188,17 @@ const search = (event: Event) => {
         postsData.value = result.docs
 
         postsData.value.forEach((post: Post) => {
-          newComms.value.set(post._id, { comment: '', author: words[0] })
+          const post_id = post._id
 
-          if (post.loaded_comments === undefined) {
-            post.loaded_comments = 'last'
+          postComms.value[post_id] = {
+            new_comm: {
+              comment: '',
+              author: words[0],
+            },
+          }
+
+          if (!postComms.value[post_id].loaded_comms) {
+            postComms.value[post_id].loaded_comms = 'last'
           }
 
           fetchCommsData(post)
@@ -208,16 +224,23 @@ const fetchPostData = (): any => {
       limit: postsLoaded,
     })
     .then((result: any) => {
-      console.log('=> Données récupérées :', result.rows)
+      console.log('=> Données récupérées :', result.docs)
       postsData.value = result.docs
 
       postsData.value.forEach((post: Post) => {
-        newComms.value.set(post._id, { comment: '', author: words[0] })
+        const post_id = post._id
 
-        if (post.loaded_comments === undefined) {
-          post.loaded_comments = 'last'
+        postComms.value[post_id] = {
+          new_comm: {
+            comment: '',
+            author: words[0],
+          },
         }
 
+        if (!postComms.value[post_id].loaded_comms) {
+          postComms.value[post_id].loaded_comms = 'last'
+        }
+        // console.log(postComms.value)
         fetchCommsData(post)
       })
     })
@@ -227,7 +250,8 @@ const fetchPostData = (): any => {
 }
 
 const fetchCommsData = (post: Post): any => {
-  if (post.loaded_comments === 'last') {
+  const post_id = post._id
+  if (postComms.value[post_id].loaded_comms === 'last') {
     storageComm.value
       .find({
         selector: { post_id: post._id, update_date: { $gte: null } },
@@ -237,12 +261,12 @@ const fetchCommsData = (post: Post): any => {
       })
       .then((result: any) => {
         console.log('=> Données commentaires récupérées :', result.docs)
-        post.comments = result.docs
+        postComms.value[post_id].comments = result.docs
       })
       .catch((error: any) => {
         console.error('Erreur lors de la récupération des données :', error)
       })
-  } else if (post.loaded_comments === 'all') {
+  } else if (postComms.value[post_id].loaded_comms === 'all') {
     storageComm.value
       .find({
         selector: { post_id: post._id, update_date: { $gte: null } },
@@ -251,7 +275,7 @@ const fetchCommsData = (post: Post): any => {
       })
       .then((result: any) => {
         console.log('=> Données commentaires récupérées :', result.docs)
-        post.comments = result.docs
+        postComms.value[post_id].comments = result.docs
       })
       .catch((error: any) => {
         console.error('Erreur lors de la récupération des données :', error)
@@ -260,8 +284,10 @@ const fetchCommsData = (post: Post): any => {
 }
 
 const toggleComms = (post: Post): any => {
-  post.loaded_comments = post.loaded_comments === 'last' ? 'all' : 'last'
-  console.log(post.loaded_comments)
+  const post_id = post._id
+  postComms.value[post_id].loaded_comms =
+    postComms.value[post_id].loaded_comms === 'last' ? 'all' : 'last'
+  console.log(postComms.value[post_id].loaded_comms)
   fetchCommsData(post)
 }
 
@@ -296,17 +322,21 @@ const createPost = (): any => {
 }
 
 const createComm = (post: Post): any => {
+  const post_id = post._id
   storageComm.value
     .post({
-      comment: newComms.value.get(post._id).comment,
-      author: newComms.value.get(post._id).author,
+      comment: postComms.value[post_id].new_comm.comment,
+      author: postComms.value[post_id].new_comm.author,
       post_id: post._id,
       creation_date: Date.now(),
       update_date: Date.now(),
     })
     .then(function (response: any) {
       console.log(response)
-      newComms.value.set(post._id, { comment: '', author: words[0] })
+      postComms.value[post_id].new_comm = {
+        comment: '',
+        author: words[0],
+      }
       fetchPostData()
     })
     .catch(function (err: any) {
@@ -468,39 +498,58 @@ const populatePosts = (amount: number): any => {
       <br />
       <p class="date">{{ new Date(post.update_date).toLocaleString() }}</p>
       <p class="date">{{ post.likes }} likes</p>
-      <button @click="addAttachment(post)">Add attachment</button>
       <button @click="updatePost(post)">Update</button>
       <button @click="deletePost(post)">Delete</button>
       <button @click="likePost(post)">Like</button>
       <hr />
-      <p>Comments :</p>
-      <input type="text" placeholder="new comment" v-model="newComms.get(post._id).comment" />
-      <select v-model="newComms.get(post._id).author">
-        <option v-for="name in words" v-bind:key="name" v-bind:value="name">
-          {{ name }}
-        </option></select
-      ><br />
-      <button @click="createComm(post)">Add comment</button>
-      <br />
-      <article v-for="comm in post.comments" v-bind:key="(comm as any).id">
+      <p>Attachments :</p>
+      <button @click="addAttachment(post)">Add attachment</button>
+      <hr />
+      <div v-if="!post._attachments || post._attachments.length === 0">
+        <p class="date">No comments (yet).</p>
+      </div>
+      <div v-else>
+        <p>Comments :</p>
+        <input
+          v-if="postsReplicated && commsReplicated"
+          type="text"
+          placeholder="new comment"
+          v-model="postComms[post._id].new_comm.comment"
+        />
+        <select v-model="postComms[post._id].new_comm.author">
+          <option v-for="name in words" v-bind:key="name" v-bind:value="name">
+            {{ name }}
+          </option></select
+        ><br />
+        <button @click="createComm(post)">Add comment</button>
         <br />
-        <div class="box">
-          <input type="text" v-model="comm.comment" />
-          <select v-model="comm.author">
-            <option v-for="name in words" v-bind:key="name" v-bind:value="name">{{ name }}</option>
-          </select>
-          <span class="conflicts" v-if="comm._conflicts">Attention, conflits !</span>
-          <br />
-          <p class="date">{{ new Date(comm.update_date).toLocaleString() }}</p>
-          <button @click="updateComm(comm, post)">Update</button>
-          <button @click="deleteComm(comm, post)">Delete</button>
+        <div v-if="!postComms[post._id].comments || postComms[post._id].comments.length === 0">
+          <p class="date">No comments (yet).</p>
         </div>
-      </article>
-      <br />
-      <button @click="toggleComms(post)">
-        <p v-if="post.loaded_comments === 'last'">Load all comments</p>
-        <p v-else>Collapse comments</p>
-      </button>
+        <div v-else>
+          <article v-for="comm in postComms[post._id].comments" v-bind:key="(comm as any).id">
+            <br />
+            <div class="box">
+              <input type="text" v-model="comm.comment" />
+              <select v-model="comm.author">
+                <option v-for="name in words" v-bind:key="name" v-bind:value="name">
+                  {{ name }}
+                </option>
+              </select>
+              <span class="conflicts" v-if="comm._conflicts">Attention, conflits !</span>
+              <br />
+              <p class="date">{{ new Date(comm.update_date).toLocaleString() }}</p>
+              <button @click="updateComm(comm, post)">Update</button>
+              <button @click="deleteComm(comm, post)">Delete</button>
+            </div>
+          </article>
+          <br />
+          <button @click="toggleComms(post)">
+            <p v-if="postComms[post._id].loaded_comms === 'last'">Load all comments</p>
+            <p v-else>Collapse comments</p>
+          </button>
+        </div>
+      </div>
     </div>
   </article>
   <br />
