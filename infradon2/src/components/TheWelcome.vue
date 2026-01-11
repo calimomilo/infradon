@@ -553,6 +553,7 @@ const populatePosts = (amount: number): any => {
             </video>
           </div>
           <div class="attachment" v-else>📄 {{ attachment }}</div>
+          <br />
           <button @click="deleteAttachment(att_id, post)">Delete</button>
         </div>
       </div>
