@@ -78,6 +78,9 @@ const newPost = ref({
 const postComms = ref()
 postComms.value = {}
 
+const postAttachments = ref()
+postAttachments.value = {}
+
 onMounted(() => {
   console.log('=> Composant initialisé')
   initDatabase()
@@ -242,6 +245,7 @@ const fetchPostData = (): any => {
         }
         // console.log(postComms.value)
         fetchCommsData(post)
+        loadAttachments(post)
       })
     })
     .catch((error: any) => {
@@ -280,6 +284,25 @@ const fetchCommsData = (post: Post): any => {
       .catch((error: any) => {
         console.error('Erreur lors de la récupération des données :', error)
       })
+  }
+}
+
+const loadAttachments = (post: Post): any => {
+  if (post._attachments) {
+    postAttachments.value[post._id] = {}
+
+    for (const attachment in post._attachments) {
+      storage.value.getAttachment(post._id, attachment).then((blob: any) => {
+        const url = URL.createObjectURL(blob)
+        // console.log(blob, url)
+        postAttachments.value[post._id][attachment] = {
+          url: url,
+          type: blob.type,
+        }
+      })
+    }
+
+    console.log(postAttachments.value)
   }
 }
 
@@ -457,6 +480,13 @@ const addAttachment = (post: Post): any => {
   input.click()
 }
 
+const deleteAttachment = (att_id: any, post: Post): any => {
+  storage.value.removeAttachment(post._id, att_id, post._rev).then((response: any) => {
+    console.log(response)
+  })
+  fetchPostData()
+}
+
 const populatePosts = (amount: number): any => {
   for (let i = 0; i < amount; i++) {
     newPost.value.message = Math.random() * 1000000000 + 'a'
@@ -504,51 +534,68 @@ const populatePosts = (amount: number): any => {
       <hr />
       <p>Attachments :</p>
       <button @click="addAttachment(post)">Add attachment</button>
+      <div v-if="!post._attachments">
+        <p class="date">No attachments (yet).</p>
+      </div>
+      <div v-else>
+        <div v-for="(attachment, att_id) in postAttachments[post._id]" v-bind:key="attachment">
+          <br />
+          <img
+            class="attachment"
+            v-if="attachment.type.startsWith('image/')"
+            :src="attachment.url"
+            :alt="attachment"
+          />
+          <div v-else-if="attachment.type.startsWith('video/')">
+            <video controls class="attachment">
+              <source :src="attachment.url" :type="attachment.type" />
+              video media not supported.
+            </video>
+          </div>
+          <div class="attachment" v-else>📄 {{ attachment }}</div>
+          <button @click="deleteAttachment(att_id, post)">Delete</button>
+        </div>
+      </div>
       <hr />
-      <div v-if="!post._attachments || post._attachments.length === 0">
+      <p>Comments :</p>
+      <input
+        v-if="postsReplicated && commsReplicated"
+        type="text"
+        placeholder="new comment"
+        v-model="postComms[post._id].new_comm.comment"
+      />
+      <select v-model="postComms[post._id].new_comm.author">
+        <option v-for="name in words" v-bind:key="name" v-bind:value="name">
+          {{ name }}
+        </option></select
+      ><br />
+      <button @click="createComm(post)">Add comment</button>
+      <br />
+      <div v-if="!postComms[post._id].comments || postComms[post._id].comments.length === 0">
         <p class="date">No comments (yet).</p>
       </div>
       <div v-else>
-        <p>Comments :</p>
-        <input
-          v-if="postsReplicated && commsReplicated"
-          type="text"
-          placeholder="new comment"
-          v-model="postComms[post._id].new_comm.comment"
-        />
-        <select v-model="postComms[post._id].new_comm.author">
-          <option v-for="name in words" v-bind:key="name" v-bind:value="name">
-            {{ name }}
-          </option></select
-        ><br />
-        <button @click="createComm(post)">Add comment</button>
-        <br />
-        <div v-if="!postComms[post._id].comments || postComms[post._id].comments.length === 0">
-          <p class="date">No comments (yet).</p>
-        </div>
-        <div v-else>
-          <article v-for="comm in postComms[post._id].comments" v-bind:key="(comm as any).id">
-            <br />
-            <div class="box">
-              <input type="text" v-model="comm.comment" />
-              <select v-model="comm.author">
-                <option v-for="name in words" v-bind:key="name" v-bind:value="name">
-                  {{ name }}
-                </option>
-              </select>
-              <span class="conflicts" v-if="comm._conflicts">Attention, conflits !</span>
-              <br />
-              <p class="date">{{ new Date(comm.update_date).toLocaleString() }}</p>
-              <button @click="updateComm(comm, post)">Update</button>
-              <button @click="deleteComm(comm, post)">Delete</button>
-            </div>
-          </article>
+        <article v-for="comm in postComms[post._id].comments" v-bind:key="(comm as any).id">
           <br />
-          <button @click="toggleComms(post)">
-            <p v-if="postComms[post._id].loaded_comms === 'last'">Load all comments</p>
-            <p v-else>Collapse comments</p>
-          </button>
-        </div>
+          <div class="box">
+            <input type="text" v-model="comm.comment" />
+            <select v-model="comm.author">
+              <option v-for="name in words" v-bind:key="name" v-bind:value="name">
+                {{ name }}
+              </option>
+            </select>
+            <span class="conflicts" v-if="comm._conflicts">Attention, conflits !</span>
+            <br />
+            <p class="date">{{ new Date(comm.update_date).toLocaleString() }}</p>
+            <button @click="updateComm(comm, post)">Update</button>
+            <button @click="deleteComm(comm, post)">Delete</button>
+          </div>
+        </article>
+        <br />
+        <button @click="toggleComms(post)">
+          <p v-if="postComms[post._id].loaded_comms === 'last'">Load all comments</p>
+          <p v-else>Collapse comments</p>
+        </button>
       </div>
     </div>
   </article>
@@ -578,6 +625,11 @@ const populatePosts = (amount: number): any => {
 
 hr {
   margin: 15px 0 5px 0;
+}
+
+.attachment {
+  max-width: 100%;
+  max-height: 250px;
 }
 
 /* The switch - the box around the slider */
